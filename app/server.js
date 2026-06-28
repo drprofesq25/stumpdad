@@ -55,8 +55,18 @@ const DIFFICULTY = {
   Expert: 'Deep-cut, niche, tournament-level difficulty for true experts.',
 };
 
-function buildPrompt({ difficulty, kidSafe, slots }) {
+function buildPrompt({ difficulty, kidSafe, slots, avoid = [] }) {
   const diff = DIFFICULTY[difficulty] || DIFFICULTY.Medium;
+  const seed = Math.floor(Math.random() * 1e6);
+  const facets =
+    'Across the whole set, deliberately vary the angle from question to question: history, geography, notable people, landmarks, sports, economy, food, nature, and surprising little-known facts. Strongly favor lesser-known specifics over the single most obvious fact. For a narrow topic (a small town, a niche hobby, a specific person), dig for genuine deep cuts — dates, names, numbers, firsts, odd details — rather than the one thing everyone already knows.';
+  const avoidBlock =
+    Array.isArray(avoid) && avoid.length
+      ? `\nALREADY ASKED — do NOT repeat, reuse, or lightly reword any of these. Make genuinely different questions:\n${avoid
+          .slice(-60)
+          .map((q) => `- ${String(q).slice(0, 140)}`)
+          .join('\n')}\n`
+      : '';
   const safety = kidSafe
     ? 'CRITICAL: Every question and answer MUST be 100% family-friendly and safe for young children. No violence, gore, sexual content, drugs, profanity, slurs, gambling, or disturbing themes. If a requested topic could go dark, keep it light and age-appropriate.'
     : 'Keep content tasteful and free of explicit, hateful, or graphic material.';
@@ -74,8 +84,11 @@ Generate EXACTLY ${slots.length} trivia questions, one for each numbered slot be
 Difficulty: ${difficulty}. ${diff}
 ${safety}
 
-For each slot, pick ONE of the listed topics and write a question from it. Vary which topic you choose so a slot's questions feel fresh. Avoid repeating questions or answers across the set.
+For each slot, pick ONE of the listed topics and write a question from it. Vary which topic you choose so a slot's questions feel fresh. Never repeat a question or answer within the set.
 
+${facets}
+Variety seed: ${seed} — use it to explore fresh angles you might not usually pick.
+${avoidBlock}
 Slots:
 ${slotLines}
 
@@ -102,7 +115,7 @@ async function callGeminiOnce(prompt) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.9 },
+        generationConfig: { responseMimeType: 'application/json', temperature: 1.0 },
       }),
     }
   );
@@ -125,7 +138,7 @@ async function callAnthropicOnce(prompt) {
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
       max_tokens: 4096,
-      temperature: 0.9,
+      temperature: 1.0,
       system:
         'You are a trivia question writer. Output ONLY a raw JSON array — no markdown, no prose, no code fences. Begin your reply with "[".',
       messages: [{ role: 'user', content: prompt }],
@@ -162,12 +175,12 @@ app.post('/api/trivia', async (req, res) => {
         .status(500)
         .json({ error: 'Server has no AI key. Set ANTHROPIC_API_KEY (Claude) or GEMINI_API_KEY in .env.' });
     }
-    const { difficulty = 'Medium', kidSafe = true, slots } = req.body || {};
+    const { difficulty = 'Medium', kidSafe = true, slots, avoid = [] } = req.body || {};
     if (!Array.isArray(slots) || slots.length === 0 || slots.length > 60) {
       return res.status(400).json({ error: 'Invalid slots payload.' });
     }
 
-    const prompt = buildPrompt({ difficulty, kidSafe, slots });
+    const prompt = buildPrompt({ difficulty, kidSafe, slots, avoid });
     let questions = await callModel(prompt);
 
     if (!Array.isArray(questions)) {

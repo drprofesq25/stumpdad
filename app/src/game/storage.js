@@ -82,3 +82,32 @@ export function loadRoster() {
     return null;
   }
 }
+
+// Remember recently-asked questions so we don't repeat them across games.
+const ASKED_KEY = 'stumpdad_asked_v1';
+export function getRecentQuestions(limit = 60) {
+  try {
+    const raw = localStorage.getItem(ASKED_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return arr.slice(-limit);
+  } catch {
+    return [];
+  }
+}
+export function addAskedQuestions(questions) {
+  try {
+    const raw = localStorage.getItem(ASKED_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    for (const q of questions) if (q) arr.push(String(q).slice(0, 160));
+    localStorage.setItem(ASKED_KEY, JSON.stringify(arr.slice(-300)));
+  } catch {
+    /* ignore */
+  }
+}
+export function clearAskedQuestions() {
+  try {
+    localStorage.removeItem(ASKED_KEY);
+  } catch {
+    /* ignore */
+  }
+}

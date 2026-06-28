@@ -9,7 +9,7 @@ import { PALETTE, AVATARS, DIFFICULTIES, TIMER_OPTIONS, MODES } from './game/con
 import { sfx, music, setMuted, isMuted } from './game/audio.js';
 import { burstConfetti } from './game/confetti.js';
 import { buildSlots, computePoints, baseForDifficulty } from './game/engine.js';
-import { recordMatch, getHallOfFame, clearHallOfFame, saveRoster, loadRoster } from './game/storage.js';
+import { recordMatch, getHallOfFame, clearHallOfFame, saveRoster, loadRoster, getRecentQuestions, addAskedQuestions } from './game/storage.js';
 
 const ICONS = { Brain, Swords, Users };
 let _pid = 0;
@@ -239,6 +239,7 @@ export default function App() {
     const payload = {
       difficulty: settings.difficulty,
       kidSafe,
+      avoid: getRecentQuestions(60),
       slots: builtSlots.map((s) => ({ idx: s.idx, target: s.answererId, topics: s.topics })),
     };
 
@@ -255,6 +256,7 @@ export default function App() {
       const data = await res.json();
       const qs = (data.questions || []).map((q, i) => ({ ...q, final: builtSlots[i]?.final, team: builtSlots[i]?.team }));
       if (!qs.length) throw new Error('No questions came back.');
+      addAskedQuestions(qs.map((q) => q.question));
 
       // reset runtime
       setQuestions(qs);
