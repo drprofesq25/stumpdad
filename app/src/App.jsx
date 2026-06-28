@@ -26,6 +26,100 @@ function makePlayer(i, team = null) {
   };
 }
 
+// --- Stable, module-level components (defined OUTSIDE App so they never remount
+// on every keystroke — that was causing inputs to lose focus). ---
+function Shell({ children }) {
+  return (
+    <div className="bg-stars min-h-screen relative">
+      <div className="relative z-10">{children}</div>
+    </div>
+  );
+}
+
+function TopicEditor({ keyId, topics, isTeam = false, hex, max, ctx }) {
+  const { topicDraft, setTopicDraft, addTopic, removeTopic } = ctx;
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input
+          value={topicDraft[keyId] || ''}
+          onChange={(e) => setTopicDraft((d) => ({ ...d, [keyId]: e.target.value }))}
+          onKeyDown={(e) => e.key === 'Enter' && addTopic(keyId, isTeam)}
+          placeholder="e.g. 80s Movies, Dinosaurs, Taylor Swift…"
+          className="flex-1 px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2"
+          style={{ '--tw-ring-color': hex }}
+        />
+        <button onClick={() => addTopic(keyId, isTeam)} className="px-3 rounded-xl text-white" style={{ background: hex }}>
+          <Plus size={20} />
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2 min-h-[34px]">
+        {topics.map((t, i) => (
+          <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold"
+            style={{ background: `${hex}22`, color: hex, border: `1px solid ${hex}44` }}>
+            {t}
+            <button onClick={() => removeTopic(keyId, i, isTeam)} className="hover:opacity-60"><X size={13} /></button>
+          </span>
+        ))}
+        {!topics.length && <span className="text-xs text-slate-500 py-1.5">No topics yet · up to {max}</span>}
+      </div>
+    </div>
+  );
+}
+
+function PlayerRow({ p, showTopics, showExpert, showTeam, ctx }) {
+  const { mode, players, expertId, setExpertId, updatePlayer, removePlayer } = ctx;
+  const hex = PALETTE[p.colorIdx % PALETTE.length].hex;
+  return (
+    <Card className="p-4 space-y-3" style={{ borderColor: `${hex}33` }}>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => { const ai = (AVATARS.indexOf(p.emoji) + 1) % AVATARS.length; updatePlayer(p.id, { emoji: AVATARS[ai] }); sfx.tap(); }}
+          className="shrink-0" title="Tap to change avatar"
+        >
+          <Avatar emoji={p.emoji} hex={hex} size={46} ring />
+        </button>
+        <input
+          value={p.name}
+          onChange={(e) => updatePlayer(p.id, { name: e.target.value })}
+          className="flex-1 bg-transparent text-lg font-bold text-white focus:outline-none border-b border-transparent focus:border-slate-600"
+        />
+        <button onClick={() => { const ci = (p.colorIdx + 1) % PALETTE.length; updatePlayer(p.id, { colorIdx: ci }); sfx.tap(); }}
+          className="w-7 h-7 rounded-full shrink-0" style={{ background: hex }} title="Tap to change color" />
+        {players.length > 2 && (
+          <button onClick={() => removePlayer(p.id)} className="text-slate-500 hover:text-rose-400 shrink-0"><Trash2 size={18} /></button>
+        )}
+      </div>
+
+      {showTeam && (
+        <div className="flex gap-2">
+          {['A', 'B'].map((tm) => (
+            <button key={tm} onClick={() => updatePlayer(p.id, { team: tm })}
+              className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+              style={p.team === tm
+                ? { background: tm === 'A' ? PALETTE[0].hex : PALETTE[2].hex, color: '#fff' }
+                : { background: 'rgba(148,163,184,0.12)', color: '#94a3b8' }}>
+              {tm === 'A' ? 'Team Indigo' : 'Team Amber'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showExpert && (
+        <button onClick={() => { setExpertId(p.id); sfx.tap(); }}
+          className="w-full py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+          style={(expertId || players[0].id) === p.id
+            ? { background: hex, color: '#fff' }
+            : { background: 'rgba(148,163,184,0.12)', color: '#94a3b8' }}>
+          <Crown size={14} /> {(expertId || players[0].id) === p.id ? 'The Expert' : 'Make Expert'}
+        </button>
+      )}
+
+      {showTopics && <TopicEditor keyId={p.id} topics={p.topics} hex={hex} max={mode === 'stump' ? 5 : 3} ctx={ctx} />}
+    </Card>
+  );
+}
+
 export default function App() {
   const [screen, setScreen] = useState('menu'); // menu|setup|loading|playing|summary|hof
   const [mode, setMode] = useState('stump');
@@ -364,11 +458,11 @@ export default function App() {
   // RENDERERS
   // =====================================================================
 
-  const Shell = ({ children }) => (
-    <div className="bg-stars min-h-screen relative">
-      <div className="relative z-10">{children}</div>
-    </div>
-  );
+  // Bundle of state + handlers passed to the lifted PlayerRow/TopicEditor.
+  const ctx = {
+    mode, players, expertId, setExpertId, updatePlayer, removePlayer,
+    topicDraft, setTopicDraft, addTopic, removeTopic,
+  };
 
   function renderMenu() {
     const hof = getHallOfFame();
@@ -429,88 +523,6 @@ export default function App() {
     );
   }
 
-  function TopicEditor({ keyId, topics, isTeam = false, hex, max }) {
-    return (
-      <div className="space-y-2">
-        <div className="flex gap-2">
-          <input
-            value={topicDraft[keyId] || ''}
-            onChange={(e) => setTopicDraft((d) => ({ ...d, [keyId]: e.target.value }))}
-            onKeyDown={(e) => e.key === 'Enter' && addTopic(keyId, isTeam)}
-            placeholder="e.g. 80s Movies, Dinosaurs, Taylor Swift…"
-            className="flex-1 px-4 py-2.5 bg-slate-900/60 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2"
-            style={{ '--tw-ring-color': hex }}
-          />
-          <button onClick={() => addTopic(keyId, isTeam)} className="px-3 rounded-xl text-white" style={{ background: hex }}>
-            <Plus size={20} />
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2 min-h-[34px]">
-          {topics.map((t, i) => (
-            <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold"
-              style={{ background: `${hex}22`, color: hex, border: `1px solid ${hex}44` }}>
-              {t}
-              <button onClick={() => removeTopic(keyId, i, isTeam)} className="hover:opacity-60"><X size={13} /></button>
-            </span>
-          ))}
-          {!topics.length && <span className="text-xs text-slate-500 py-1.5">No topics yet · up to {max}</span>}
-        </div>
-      </div>
-    );
-  }
-
-  function PlayerRow({ p, showTopics, showExpert, showTeam }) {
-    const hex = colorOf(p);
-    return (
-      <Card className="p-4 space-y-3" style={{ borderColor: `${hex}33` }}>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => { const ai = (AVATARS.indexOf(p.emoji) + 1) % AVATARS.length; updatePlayer(p.id, { emoji: AVATARS[ai] }); sfx.tap(); }}
-            className="shrink-0" title="Tap to change avatar"
-          >
-            <Avatar emoji={p.emoji} hex={hex} size={46} ring />
-          </button>
-          <input
-            value={p.name}
-            onChange={(e) => updatePlayer(p.id, { name: e.target.value })}
-            className="flex-1 bg-transparent text-lg font-bold text-white focus:outline-none border-b border-transparent focus:border-slate-600"
-          />
-          <button onClick={() => { const ci = (p.colorIdx + 1) % PALETTE.length; updatePlayer(p.id, { colorIdx: ci }); sfx.tap(); }}
-            className="w-7 h-7 rounded-full shrink-0" style={{ background: hex }} title="Tap to change color" />
-          {players.length > 2 && (
-            <button onClick={() => removePlayer(p.id)} className="text-slate-500 hover:text-rose-400 shrink-0"><Trash2 size={18} /></button>
-          )}
-        </div>
-
-        {showTeam && (
-          <div className="flex gap-2">
-            {['A', 'B'].map((tm) => (
-              <button key={tm} onClick={() => updatePlayer(p.id, { team: tm })}
-                className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
-                style={p.team === tm
-                  ? { background: tm === 'A' ? PALETTE[0].hex : PALETTE[2].hex, color: '#fff' }
-                  : { background: 'rgba(148,163,184,0.12)', color: '#94a3b8' }}>
-                {tm === 'A' ? 'Team Indigo' : 'Team Amber'}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {showExpert && (
-          <button onClick={() => { setExpertId(p.id); sfx.tap(); }}
-            className="w-full py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-            style={(expertId || players[0].id) === p.id
-              ? { background: hex, color: '#fff' }
-              : { background: 'rgba(148,163,184,0.12)', color: '#94a3b8' }}>
-            <Crown size={14} /> {(expertId || players[0].id) === p.id ? 'The Expert' : 'Make Expert'}
-          </button>
-        )}
-
-        {showTopics && <TopicEditor keyId={p.id} topics={p.topics} hex={hex} max={mode === 'stump' ? 5 : 3} />}
-      </Card>
-    );
-  }
-
   function renderSetup() {
     const m = MODES[mode];
     const eId = expertId || players[0].id;
@@ -539,7 +551,7 @@ export default function App() {
               <PlayerRow key={p.id} p={p}
                 showTopics={mode === 'ffa' || (mode === 'stump' && p.id === eId)}
                 showExpert={mode === 'stump'}
-                showTeam={mode === 'teams'} />
+                showTeam={mode === 'teams'} ctx={ctx} />
             ))}
           </div>
 
@@ -551,7 +563,7 @@ export default function App() {
                 return (
                   <Card key={tm} className="p-4 space-y-2" style={{ borderColor: `${hex}44` }}>
                     <h4 className="font-black text-sm" style={{ color: hex }}>{tm === 'A' ? 'Team Indigo' : 'Team Amber'} topics</h4>
-                    <TopicEditor keyId={tm} topics={teamTopics[tm]} isTeam hex={hex} max={4} />
+                    <TopicEditor keyId={tm} topics={teamTopics[tm]} isTeam hex={hex} max={4} ctx={ctx} />
                   </Card>
                 );
               })}
