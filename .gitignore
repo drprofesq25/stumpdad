@@ -1,0 +1,17 @@
+# Dependencies & build output (rebuilt on each machine)
+node_modules/
+dist/
+
+# Secrets — never commit
+.env
+*.env.local
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
+
+# Keep the original prototype + report out of the deployable repo if desired:
+# (left tracked by default for history — remove these lines to ignore them)
+# stumpdad.tsx
+# StumpDad Functionality Report.docx

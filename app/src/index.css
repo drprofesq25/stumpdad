@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 800px at 50% -10%, #1e293b 0%, #0f172a 55%, #0b1120 100%);
+  color: #e2e8f0;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Prevent iOS double-tap zoom on buttons; keep taps snappy */
+button {
+  touch-action: manipulation;
+}
+
+/* Subtle starfield texture */
+.bg-stars::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(1px 1px at 20% 30%, rgba(255, 255, 255, 0.18) 50%, transparent),
+    radial-gradient(1px 1px at 70% 60%, rgba(255, 255, 255, 0.12) 50%, transparent),
+    radial-gradient(1.5px 1.5px at 40% 80%, rgba(255, 255, 255, 0.10) 50%, transparent),
+    radial-gradient(1px 1px at 85% 20%, rgba(255, 255, 255, 0.14) 50%, transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.glass {
+  background: rgba(30, 41, 59, 0.55);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
