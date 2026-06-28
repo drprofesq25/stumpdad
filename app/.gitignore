@@ -1,5 +1,6 @@
 node_modules/
 dist/
 .env
+.tts-cache/
 *.log
 .DS_Store

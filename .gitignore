@@ -6,6 +6,9 @@ dist/
 .env
 *.env.local
 
+# TTS audio cache
+.tts-cache/
+
 # Misc
 *.log
 .DS_Store

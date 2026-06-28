@@ -282,6 +282,11 @@ export default function App() {
     }
   }
 
+  // Detect premium voice availability once on load.
+  useEffect(() => {
+    narrator.init();
+  }, []);
+
   // ---------- timer ----------
   useEffect(() => {
     if (screen !== 'playing' || phase !== 'q' || settings.timerSec === 0) return;
@@ -307,8 +312,12 @@ export default function App() {
       if (screen !== 'playing') narrator.cancel();
       return;
     }
-    if (phase === 'q') narrator.speak(curQ.question);
-    else if (phase === 'reveal') narrator.speak(`The answer is: ${curQ.answer}.`);
+    if (phase === 'q') {
+      narrator.speak(curQ.question);
+      narrator.prefetch(questions[qIndex + 1]?.question); // warm next question's audio
+    } else if (phase === 'reveal') {
+      narrator.speak(`The answer is: ${curQ.answer}.`);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qIndex, phase, screen, settings.readAloud]);
   const answerer = curSlot ? players.find((p) => p.id === curSlot.answererId) : null;

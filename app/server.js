@@ -5,6 +5,7 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -39,12 +40,73 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const MODEL = PROVIDER === 'anthropic' ? ANTHROPIC_MODEL : GEMINI_MODEL;
 const HAS_KEY = PROVIDER === 'anthropic' ? Boolean(ANTHROPIC_KEY) : PROVIDER === 'gemini' ? Boolean(GEMINI_KEY) : false;
 
+// --- Premium voice (OpenAI TTS) — optional. Falls back to browser voice if unset.
+const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
+const TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
+const TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'ash';
+const TTS_INSTRUCTIONS =
+  process.env.OPENAI_TTS_INSTRUCTIONS ||
+  'You are an energetic, charismatic TV game-show host. Speak with upbeat, punchy enthusiasm and playful showmanship, building excitement. Lively and clear, never rushed or monotone.';
+const HAS_TTS = Boolean(OPENAI_KEY);
+
 const app = express();
 app.use(express.json({ limit: '256kb' }));
 
 // --- Health check ---
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, provider: PROVIDER, model: MODEL, hasKey: HAS_KEY, time: new Date().toISOString() });
+  res.json({ ok: true, provider: PROVIDER, model: MODEL, hasKey: HAS_KEY, tts: HAS_TTS, time: new Date().toISOString() });
+});
+
+// --- Premium voice: text -> mp3 via OpenAI, cached on disk by content hash ---
+const ttsCacheDir = path.join(__dirname, '.tts-cache');
+try {
+  fs.mkdirSync(ttsCacheDir, { recursive: true });
+} catch {
+  /* ignore */
+}
+
+app.post('/api/tts', async (req, res) => {
+  try {
+    if (!HAS_TTS) return res.status(503).json({ error: 'No TTS key configured.' });
+    const { text, voice } = req.body || {};
+    if (!text || typeof text !== 'string') return res.status(400).json({ error: 'No text.' });
+    const clean = text.slice(0, 700);
+    const v = String(voice || TTS_VOICE).slice(0, 40);
+    const hash = crypto.createHash('sha1').update(`${TTS_MODEL}|${v}|${TTS_INSTRUCTIONS}|${clean}`).digest('hex');
+    const file = path.join(ttsCacheDir, `${hash}.mp3`);
+
+    if (fs.existsSync(file)) {
+      res.set('Content-Type', 'audio/mpeg');
+      res.set('X-Cache', 'hit');
+      return fs.createReadStream(file).pipe(res);
+    }
+
+    const body = { model: TTS_MODEL, voice: v, input: clean, response_format: 'mp3' };
+    if (/gpt-4o/.test(TTS_MODEL)) body.instructions = TTS_INSTRUCTIONS; // style steering (newer models only)
+
+    const r = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const b = await r.text().catch(() => '');
+      console.error('[stumpdad] TTS', r.status, b.slice(0, 200));
+      return res.status(502).json({ error: 'TTS failed.' });
+    }
+    const buf = Buffer.from(await r.arrayBuffer());
+    try {
+      fs.writeFileSync(file, buf);
+    } catch {
+      /* ignore cache write errors */
+    }
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('X-Cache', 'miss');
+    res.send(buf);
+  } catch (e) {
+    console.error('[stumpdad] TTS exception:', e.message);
+    res.status(502).json({ error: 'TTS failed.' });
+  }
 });
 
 // --- Difficulty guidance for the model ---

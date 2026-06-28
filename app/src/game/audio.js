@@ -135,3 +135,38 @@ export const sfx = {
     tone({ type: 'sine', from: 1046.5, to: 2093, dur: 0.5, vol: 0.2, when: 0.6 });
   },
 };
+
+// --- Play an mp3 clip (TTS) through the shared, already-unlocked AudioContext.
+// Routing TTS through WebAudio (instead of <audio>) avoids iOS autoplay blocks. ---
+let currentClip = null;
+export async function playClipFromArrayBuffer(arrayBuffer) {
+  const c = getCtx();
+  if (!c) throw new Error('no audio context');
+  if (c.state === 'suspended') await c.resume();
+  const buf = await c.decodeAudioData(arrayBuffer.slice(0));
+  stopClip();
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const g = c.createGain();
+  g.gain.value = 1;
+  src.connect(g);
+  g.connect(c.destination);
+  currentClip = src;
+  return new Promise((resolve) => {
+    src.onended = () => {
+      if (currentClip === src) currentClip = null;
+      resolve();
+    };
+    src.start();
+  });
+}
+export function stopClip() {
+  if (currentClip) {
+    try {
+      currentClip.stop();
+    } catch {
+      /* ignore */
+    }
+    currentClip = null;
+  }
+}
