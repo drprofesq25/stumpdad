@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Brain, Swords, Users, Trophy, RefreshCw, Plus, X, ChevronLeft, Crown, Volume2, VolumeX,
   SkipForward, Lightbulb, Flame, Check, ArrowRight, Trash2, Medal, Home, Play, UserPlus,
-  Shuffle, Clock, Star, Music2,
+  Shuffle, Clock, Star, Music2, Megaphone,
 } from 'lucide-react';
 import { Button, Card, ProgressRing, Avatar } from './ui.jsx';
 import { PALETTE, AVATARS, DIFFICULTIES, TIMER_OPTIONS, MODES } from './game/constants.js';
 import { sfx, music, setMuted, isMuted } from './game/audio.js';
+import { narrator } from './game/speech.js';
 import { burstConfetti } from './game/confetti.js';
 import { buildSlots, computePoints, baseForDifficulty } from './game/engine.js';
 import { recordMatch, getHallOfFame, clearHallOfFame, saveRoster, loadRoster, getRecentQuestions, addAskedQuestions } from './game/storage.js';
@@ -141,6 +142,7 @@ export default function App() {
     steal: true,
     lifelines: true,
     kidSafe: true,
+    readAloud: true,
     roundsStump: 10,
     roundsPerPlayer: 3,
   });
@@ -229,6 +231,7 @@ export default function App() {
   // ---------- start game ----------
   async function startGame() {
     setError(null);
+    narrator.warmup(); // prime TTS inside this user gesture (needed on iOS)
     const eId = expertId || players[0].id;
     if (mode === 'stump') setExpertId(eId);
 
@@ -297,6 +300,17 @@ export default function App() {
   // ---------- scoring keys ----------
   const curQ = questions[qIndex];
   const curSlot = slots[qIndex];
+
+  // ---------- host voice: read question on show, answer on reveal ----------
+  useEffect(() => {
+    if (screen !== 'playing' || !settings.readAloud || !curQ) {
+      if (screen !== 'playing') narrator.cancel();
+      return;
+    }
+    if (phase === 'q') narrator.speak(curQ.question);
+    else if (phase === 'reveal') narrator.speak(`The answer is: ${curQ.answer}.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qIndex, phase, screen, settings.readAloud]);
   const answerer = curSlot ? players.find((p) => p.id === curSlot.answererId) : null;
   const scoreKey = (slot) => (mode === 'teams' ? slot.team : slot.answererId);
   const streakKey = (slot) => (mode === 'teams' ? slot.team : slot.answererId);
@@ -606,6 +620,7 @@ export default function App() {
               ['finalRound', '🔥 Final round', 'Last questions worth double'],
               ['steal', '🥷 Steals', 'Others can grab a missed question', mode !== 'stump'],
               ['lifelines', '💡 Lifelines', 'Skips & hints for the brave'],
+              ['readAloud', '📣 Host voice', 'Read each question aloud'],
               ['kidSafe', '🧸 Kid-safe content', 'Keep everything family-friendly'],
             ].map(([k, label, sub, show = true]) => show && (
               <button key={k} onClick={() => { sfx.tap(); setSettings((s) => ({ ...s, [k]: !s[k] })); }}
@@ -671,6 +686,13 @@ export default function App() {
             <button onClick={() => { sfx.tap(); if (confirm('Quit this match?')) setScreen('menu'); }} className="text-slate-500 hover:text-white"><Home size={20} /></button>
             <div className="text-xs font-bold text-slate-400">Question {qIndex + 1} / {total}</div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => { sfx.tap(); setSettings((s) => { const v = !s.readAloud; if (!v) narrator.cancel(); return { ...s, readAloud: v }; }); }}
+                className={settings.readAloud ? 'text-emerald-400' : 'text-slate-500 hover:text-white'}
+                title="Host voice (read questions aloud)"
+              >
+                <Megaphone size={20} />
+              </button>
               <button onClick={toggleMusic} className={musicOn ? 'text-emerald-400' : 'text-slate-500 hover:text-white'}><Music2 size={20} /></button>
               <button onClick={toggleMute} className="text-slate-500 hover:text-white">{muted ? <VolumeX size={20} /> : <Volume2 size={20} />}</button>
             </div>
@@ -723,7 +745,14 @@ export default function App() {
                 {curSlot.final && settings.timerSec > 0 && <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-400 text-slate-900">🔥 ×2</span>}
               </div>
 
-              <h3 className="text-2xl font-black text-white leading-snug flex-1">{curQ.question}</h3>
+              <h3 className="text-2xl font-black text-white leading-snug">{curQ.question}</h3>
+              {settings.readAloud && narrator.supported() && (
+                <button onClick={() => { sfx.tap(); narrator.speak(curQ.question); }}
+                  className="mt-2 self-start text-xs text-slate-400 hover:text-emerald-400 flex items-center gap-1.5">
+                  <Megaphone size={14} /> Replay question
+                </button>
+              )}
+              <div className="flex-1" />
 
               {/* hint */}
               {hintShown && phase === 'q' && (
